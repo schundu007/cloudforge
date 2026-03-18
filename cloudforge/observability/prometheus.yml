@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - "rules/*.yml"
+
+scrape_configs:
+  - job_name: cloudforge-api
+    static_configs:
+      - targets: ["cloudforge-api:8000"]
+    metrics_path: /metrics
+
+  - job_name: localstack
+    static_configs:
+      - targets: ["localstack:4566"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

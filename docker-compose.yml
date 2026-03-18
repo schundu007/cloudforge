@@ -1,0 +1,87 @@
+version: "3.9"
+
+services:
+  # ── CloudForge API ─────────────────────────────────────────────
+  cloudforge-api:
+    build: .
+    command: /opt/venv/bin/uvicorn cloudforge.interfaces.web.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      LOCALSTACK_ENDPOINT: http://localstack:4566
+    volumes:
+      - .:/app
+      - ${HOME}/.aws:/root/.aws:ro
+    depends_on:
+      - localstack
+      - redis
+
+  # ── GitHub App webhook receiver ─────────────────────────────────
+  cloudforge-github-app:
+    build: .
+    command: /opt/venv/bin/uvicorn cloudforge.interfaces.github_app.webhook:app --host 0.0.0.0 --port 8001 --reload
+    ports:
+      - "8001:8001"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      CLOUDFORGE_API_URL: http://cloudforge-api:8000
+    volumes:
+      - .:/app
+
+  # ── LocalStack (AWS emulation) ──────────────────────────────────
+  localstack:
+    image: localstack/localstack:3.8
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,ec2,iam,sts,lambda,sqs,sns,secretsmanager,logs,cloudwatch
+      DEFAULT_REGION: us-east-1
+      LOCALSTACK_VOLUME_DIR: /var/lib/localstack
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # ── act runner (GitHub Actions local) ──────────────────────────
+  # act is run as a subprocess by the emulator — no dedicated service needed
+  # Install: curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+
+  # ── Redis (run state in production) ────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+  # ── Prometheus (observe CloudForge itself) ──────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./cloudforge/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+
+  # ── Grafana ─────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: cloudforge
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./cloudforge/observability/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+
+volumes:
+  localstack-data:
+  redis-data:
+  grafana-data:

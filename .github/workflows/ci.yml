@@ -1,0 +1,107 @@
+name: CloudForge CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install UV
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Type check
+        run: uv run mypy cloudforge
+
+      - name: Run tests
+        run: uv run pytest --cov=cloudforge --cov-report=xml -q
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+
+  checkov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform,github_actions
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+          soft_fail: false
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov.sarif
+
+  build-extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: interfaces/vscode-ext
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: interfaces/vscode-ext/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cloudforge-vscode-ext
+          path: interfaces/vscode-ext/cloudforge-*.vsix
+
+  docker:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [lint-test, checkov]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE=${{ vars.ECR_REGISTRY }}/cloudforge:${{ github.sha }}
+          docker build -t $IMAGE .
+          docker push $IMAGE
+          docker tag $IMAGE ${{ vars.ECR_REGISTRY }}/cloudforge:latest
+          docker push ${{ vars.ECR_REGISTRY }}/cloudforge:latest

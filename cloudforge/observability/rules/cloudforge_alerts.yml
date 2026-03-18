@@ -1,0 +1,53 @@
+groups:
+  - name: cloudforge.agent
+    rules:
+      - alert: AgentRunFailing
+        expr: rate(cloudforge_run_total{status="error"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CloudForge agent runs are failing"
+          description: "More than 10% of agent runs are erroring over the last 5 minutes."
+          runbook_url: "https://github.com/your-org/cloudforge/blob/main/docs/runbooks/agent-failing.md"
+
+      - alert: AgentAutoFixBudgetExceeded
+        expr: cloudforge_autofix_retries_total > 4
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CloudForge auto-fix retry budget exceeded"
+          description: "An agent run hit the max retry limit — human review required."
+
+      - alert: EmulatorUnreachable
+        expr: up{job="localstack"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LocalStack emulator is down"
+          description: "CloudForge cannot validate IaC changes without the LocalStack emulator."
+
+  - name: cloudforge.api
+    rules:
+      - record: cloudforge:api:request_rate5m
+        expr: rate(http_requests_total{job="cloudforge-api"}[5m])
+
+      - alert: APIHighErrorRate
+        expr: rate(http_requests_total{job="cloudforge-api",status=~"5.."}[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CloudForge API high error rate"
+          description: "5xx error rate above 5% for 3 minutes."
+
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="cloudforge-api"}[5m])) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CloudForge API p95 latency above 10s"
+          description: "Agent runs may be timing out."

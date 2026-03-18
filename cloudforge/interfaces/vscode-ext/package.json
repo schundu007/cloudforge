@@ -1,0 +1,84 @@
+{
+  "name": "cloudforge",
+  "displayName": "CloudForge",
+  "description": "Cloud infrastructure-native coding agent — pipelines, IaC, security, observability",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["AI", "Other"],
+  "activationEvents": [
+    "onLanguage:terraform",
+    "onLanguage:yaml",
+    "workspaceContains:**/main.tf",
+    "workspaceContains:.github/workflows/*.yml"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "cloudforge.run",           "title": "CloudForge: Run agent",                "category": "CloudForge" },
+      { "command": "cloudforge.fastEdit",      "title": "CloudForge: Fast Edit (⌘K)",           "category": "CloudForge" },
+      { "command": "cloudforge.scan",          "title": "CloudForge: Scan and fix IaC security","category": "CloudForge" },
+      { "command": "cloudforge.addObs",        "title": "CloudForge: Add observability",        "category": "CloudForge" },
+      { "command": "cloudforge.genIAM",        "title": "CloudForge: Generate least-priv IAM",  "category": "CloudForge" },
+      { "command": "cloudforge.runEmulator",   "title": "CloudForge: Run emulator (act)",       "category": "CloudForge" },
+      { "command": "cloudforge.tfPlan",        "title": "CloudForge: Terraform plan (LocalStack)","category": "CloudForge" },
+      { "command": "cloudforge.checkpoint",    "title": "CloudForge: Checkpoint state",         "category": "CloudForge" },
+      { "command": "cloudforge.background",    "title": "CloudForge: Start background task",    "category": "CloudForge" },
+      { "command": "cloudforge.showContext",   "title": "CloudForge: Show infra context",       "category": "CloudForge" }
+    ],
+    "keybindings": [
+      { "command": "cloudforge.fastEdit", "key": "ctrl+k",     "mac": "cmd+k",     "when": "editorTextFocus && resourceExtname =~ /\\.(tf|yml|yaml|rego)$/" },
+      { "command": "cloudforge.run",      "key": "ctrl+l",     "mac": "cmd+l",     "when": "editorTextFocus" },
+      { "command": "cloudforge.scan",     "key": "ctrl+shift+s","mac": "cmd+shift+s","when": "editorTextFocus" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "cloudforge.fastEdit",    "when": "resourceExtname =~ /\\.(tf|yml|yaml|rego)$/", "group": "cloudforge@1" },
+        { "command": "cloudforge.scan",        "when": "resourceExtname == .tf",                       "group": "cloudforge@2" },
+        { "command": "cloudforge.addObs",      "when": "resourceExtname =~ /\\.(tf|yml)/",             "group": "cloudforge@3" }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "cloudforge", "title": "CloudForge", "icon": "$(cloud)" }
+      ]
+    },
+    "views": {
+      "cloudforge": [
+        { "id": "cloudforge.agentPanel",  "name": "Agent" },
+        { "id": "cloudforge.diffPanel",   "name": "Diff Review" },
+        { "id": "cloudforge.contextView", "name": "Infra Context" }
+      ]
+    },
+    "configuration": {
+      "title": "CloudForge",
+      "properties": {
+        "cloudforge.apiUrl":          { "type": "string",  "default": "http://localhost:8000", "description": "CloudForge API URL" },
+        "cloudforge.autoCheckpoint":  { "type": "boolean", "default": true,  "description": "Checkpoint tf state before each apply" },
+        "cloudforge.alwaysRunCheckov":{ "type": "boolean", "default": true,  "description": "Always run checkov before showing diff" },
+        "cloudforge.maxFixRetries":   { "type": "number",  "default": 5,     "description": "Max auto-fix retries before escalating" },
+        "cloudforge.cloudPlatforms":  { "type": "array",   "default": ["aws","gcp","azure","oci"], "description": "Enabled cloud platforms" }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^5.1.4",
+    "ts-loader": "^9.5.1",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "eslint": "^8.57.0"
+  },
+  "dependencies": {
+    "eventsource": "^2.0.2"
+  }
+}

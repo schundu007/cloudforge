@@ -1,0 +1,50 @@
+version: "1"
+project: payments-platform
+
+naming:
+  convention: "[prefix]-[project]-[suffix][env]-[random]-[resource]"
+  prefix: tf
+  # Example: tf-payments-svcprod-x7k-sg
+
+cloud:
+  platforms: [aws, gcp]
+  aws_region: us-east-1
+  gcp_project_id: my-gcp-project-123
+
+security:
+  always_run_checkov: true
+  always_run_tfsec: true
+  block_on_critical: true
+  scrub_secrets_from_context: true
+  iam_least_privilege: true
+
+emulator:
+  localstack_endpoint: http://localhost:4566
+  act_binary: act
+  max_fix_retries: 5
+  tf_plan_timeout_seconds: 120
+  act_timeout_seconds: 300
+
+hooks:
+  pre-commit:
+    enabled: true
+    block_on: [HIGH, CRITICAL]     # block commit on these severities
+
+  pr-opened:
+    enabled: true
+    tf_plan_comment: true          # post tf plan summary as PR comment
+
+  cost-threshold:
+    enabled: true
+    monthly_delta_usd: 500         # block merge if delta > $500/mo
+
+  drift:
+    enabled: true
+    schedule: "0 */6 * * *"       # check for tf state drift every 6h
+
+  deploy:prod:
+    enabled: true                  # security gate before prod deploy
+
+  log-error:
+    enabled: true
+    sources: [cloudwatch, gcp_logs]

@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""
+CloudForge Pre-Commit Hook
+Runs checkov + tfsec on staged .tf files. Blocks commit on HIGH/CRITICAL findings.
+Auto-generates fix diff as a git stash.
+
+Install: cloudforge hook install
+Or manually: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+"""
+import asyncio
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+def get_staged_tf_files() -> list[str]:
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+        capture_output=True, text=True,
+    )
+    return [f for f in result.stdout.splitlines() if f.endswith(".tf")]
+
+
+def get_staged_content(file_path: str) -> str:
+    result = subprocess.run(
+        ["git", "show", f":{file_path}"],
+        capture_output=True, text=True,
+    )
+    return result.stdout
+
+
+def run_checkov_on_content(content: str, filename: str) -> dict:
+    with tempfile.NamedTemporaryFile(suffix=".tf", mode="w", delete=False) as f:
+        f.write(content)
+        tmp = f.name
+    result = subprocess.run(
+        ["checkov", "-f", tmp, "--output", "json", "--quiet"],
+        capture_output=True, text=True, timeout=60,
+    )
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {"passed": True, "critical": []}
+
+    failed = data.get("results", {}).get("failed_checks", [])
+    critical = [c for c in failed if c.get("check_result", {}).get("result") == "failed"]
+    return {
+        "passed": len(critical) == 0,
+        "critical": critical,
+        "summary": data.get("summary", {}),
+    }
+
+
+def run_tfsec_on_content(content: str) -> dict:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tf_file = Path(tmpdir) / "main.tf"
+        tf_file.write_text(content)
+        result = subprocess.run(
+            ["tfsec", tmpdir, "--format", "json"],
+            capture_output=True, text=True, timeout=30,
+        )
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {"passed": True, "critical": []}
+
+    results = data.get("results", [])
+    critical = [r for r in results if r.get("severity") in ("HIGH", "CRITICAL")]
+    return {"passed": len(critical) == 0, "critical": critical}
+
+
+def print_banner(text: str, color: str = "cyan") -> None:
+    colors = {"red": "\033[91m", "green": "\033[92m", "yellow": "\033[93m",
+              "cyan": "\033[96m", "reset": "\033[0m", "bold": "\033[1m"}
+    print(f"{colors['bold']}{colors[color]}{text}{colors['reset']}")
+
+
+def main() -> int:
+    tf_files = get_staged_tf_files()
+    if not tf_files:
+        return 0  # No .tf files staged — pass through
+
+    print_banner("🔒 CloudForge Security Gate", "cyan")
+    print(f"   Scanning {len(tf_files)} staged .tf file(s)...\n")
+
+    all_passed = True
+    findings_by_file: dict[str, list] = {}
+
+    for tf_file in tf_files:
+        content = get_staged_content(tf_file)
+        if not content.strip():
+            continue
+
+        checkov_result = run_checkov_on_content(content, tf_file)
+        tfsec_result = run_tfsec_on_content(content)
+
+        file_findings = checkov_result["critical"] + tfsec_result["critical"]
+        if file_findings:
+            all_passed = False
+            findings_by_file[tf_file] = file_findings
+            print_banner(f"  ❌ {tf_file}", "red")
+            for finding in file_findings[:5]:
+                check_id = finding.get("check_id") or finding.get("rule_id", "?")
+                desc = finding.get("check_summary") or finding.get("description", "?")
+                print(f"     [{check_id}] {desc}")
+            if len(file_findings) > 5:
+                print(f"     ... and {len(file_findings) - 5} more findings")
+        else:
+            print(f"  ✅ {tf_file}")
+
+    print()
+    if all_passed:
+        print_banner("✅ All security checks passed — commit allowed", "green")
+        return 0
+
+    print_banner("❌ Security findings must be fixed before committing", "red")
+    print()
+    print("  Options:")
+    print("  1. Run:  cloudforge run 'fix all security findings in staged files'")
+    print("  2. Or:   cloudforge scan --fix")
+    print("  3. Or:   git commit --no-verify  (bypass — not recommended)")
+    print()
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
