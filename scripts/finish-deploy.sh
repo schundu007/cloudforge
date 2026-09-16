@@ -24,10 +24,40 @@ die()  { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; exit 1; }
 command -v railway >/dev/null || die "railway CLI not found."
 command -v vercel  >/dev/null || die "vercel CLI not found."
 
-bold "1. Reading ANTHROPIC_API_KEY from .env"
+# Optional: pull secrets from another Railway project instead of .env, e.g.
+#   CAMORA_PROJECT=30f91c28-337b-4133-bf0c-86f758babb11 \
+#   CAMORA_SERVICE=camora-ai ./scripts/finish-deploy.sh
+CAMORA_PROJECT="${CAMORA_PROJECT:-}"
+CAMORA_SERVICE="${CAMORA_SERVICE:-}"
+
+# Read one variable out of a Railway service without printing it.
+railway_var() { # <project> <service> <key>
+  railway variables -p "$1" -s "$2" --json 2>/dev/null \
+    | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('$3','') if isinstance(d,dict) else '')" 2>/dev/null
+}
+
+bold "1. Locating ANTHROPIC_API_KEY"
 ANTHROPIC_KEY="$(grep -E '^ANTHROPIC_API_KEY=' .env | head -1 | cut -d= -f2- | tr -d '"'"'"' ' || true)"
-[ -n "$ANTHROPIC_KEY" ] || die "ANTHROPIC_API_KEY missing from .env"
-ok "found (${#ANTHROPIC_KEY} chars)"
+if [ -n "$ANTHROPIC_KEY" ]; then
+  ok "found in .env (${#ANTHROPIC_KEY} chars)"
+elif [ -n "$CAMORA_PROJECT" ] && [ -n "$CAMORA_SERVICE" ]; then
+  ANTHROPIC_KEY="$(railway_var "$CAMORA_PROJECT" "$CAMORA_SERVICE" ANTHROPIC_API_KEY)"
+  [ -n "$ANTHROPIC_KEY" ] || die "ANTHROPIC_API_KEY not found in $CAMORA_SERVICE"
+  ok "pulled from Railway service $CAMORA_SERVICE (${#ANTHROPIC_KEY} chars)"
+else
+  die "ANTHROPIC_API_KEY missing. Put it in .env, or set CAMORA_PROJECT and CAMORA_SERVICE to copy it from another Railway service."
+fi
+
+# Sanity-check the key before deploying with it.
+key_code="$(curl -s -o /dev/null -w '%{http_code}' -m 20 https://api.anthropic.com/v1/messages \
+  -H "x-api-key: $ANTHROPIC_KEY" -H "anthropic-version: 2023-06-01" \
+  -H 'content-type: application/json' \
+  -d '{"model":"claude-sonnet-4-6","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}')"
+case "$key_code" in
+  200|400) ok "Anthropic accepted the key" ;;
+  401|403)  die "Anthropic rejected the key (HTTP $key_code). Rotate it and retry." ;;
+  *)        warn "unexpected response from Anthropic (HTTP $key_code); continuing" ;;
+esac
 
 bold "2. GitHub token"
 GH_TOKEN=""
@@ -37,6 +67,14 @@ if command -v gh >/dev/null && gh auth token >/dev/null 2>&1; then
      [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CANDIDATE" https://api.github.com/user)" = "200" ]; then
     GH_TOKEN="$CANDIDATE"
     ok "using valid token from gh CLI"
+  fi
+fi
+if [ -z "$GH_TOKEN" ] && [ -n "$CAMORA_PROJECT" ] && [ -n "$CAMORA_SERVICE" ]; then
+  CANDIDATE="$(railway_var "$CAMORA_PROJECT" "$CAMORA_SERVICE" GITHUB_TOKEN)"
+  if [ -n "$CANDIDATE" ] && \
+     [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CANDIDATE" https://api.github.com/user)" = "200" ]; then
+    GH_TOKEN="$CANDIDATE"
+    ok "pulled a valid token from Railway service $CAMORA_SERVICE"
   fi
 fi
 if [ -z "$GH_TOKEN" ]; then
