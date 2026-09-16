@@ -1,59 +1,66 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Run, AgentEvent } from '../store';
+import {
+  IconLayers, IconTarget, IconAgent, IconCheck, IconEmulator, IconFail,
+  IconFix, IconDiff, IconEscalate, IconError,
+  IconDoc,
+} from './icons';
 
-const EVENT_CONFIG: Record<string, { icon: string; color: string; label: (e: AgentEvent) => string }> = {
+type IconCmp = (props: { size?: number; className?: string }) => JSX.Element;
+
+const EVENT_CONFIG: Record<string, { Icon: IconCmp; color: string; label: (e: AgentEvent) => string }> = {
   context_loaded: {
-    icon: '📂',
+    Icon: IconLayers,
     color: 'neutral',
     label: e => `Context loaded — ${e.tf_modules?.length ?? 0} TF modules, ${e.workflows?.length ?? 0} workflows`,
   },
   classified: {
-    icon: '🎯',
+    Icon: IconTarget,
     color: 'info',
     label: e => `Task classified as: ${e.task_type}`,
   },
   agent_start: {
-    icon: '🤖',
+    Icon: IconAgent,
     color: 'info',
     label: e => `${e.agent} agent started`,
   },
   agent_done: {
-    icon: '✅',
+    Icon: IconCheck,
     color: 'success',
     label: e => `${e.agent} agent complete — ${(e.files ?? []).length} file(s) generated`,
   },
   emulator_start: {
-    icon: '🏃',
+    Icon: IconEmulator,
     color: 'neutral',
     label: e => `Emulator run #${(e.iteration ?? 0) + 1}`,
   },
   emulator_pass: {
-    icon: '✅',
+    Icon: IconCheck,
     color: 'success',
     label: e => `Emulator passed — ${e.summary ?? ''}`,
   },
   emulator_fail: {
-    icon: '❌',
+    Icon: IconFail,
     color: 'danger',
     label: e => `Emulator failed — ${e.errors?.length ?? 0} error(s)`,
   },
   fix_start: {
-    icon: '🔧',
+    Icon: IconFix,
     color: 'warn',
-    label: e => `Auto-fix generating patches…`,
+    label: () => 'Auto-fix generating patches…',
   },
   diff_ready: {
-    icon: '📋',
+    Icon: IconDiff,
     color: 'success',
     label: e => `Diff ready — ${(e.files ?? []).length} file(s), ${e.fix_iterations ?? 0} fix iteration(s)`,
   },
   escalate: {
-    icon: '🚨',
+    Icon: IconEscalate,
     color: 'danger',
     label: e => `Escalation: ${e.message ?? 'max retries reached'}`,
   },
   error: {
-    icon: '💥',
+    Icon: IconError,
     color: 'danger',
     label: e => `Error: ${e.message ?? 'unknown'}`,
   },
@@ -96,7 +103,9 @@ export function AgentPanel({ run }: Props) {
       {/* Escalation block */}
       {run.status === 'escalated' && (
         <div className="cf-escalation">
-          <div className="cf-escalation-header">🚨 Human Review Required</div>
+          <div className="cf-escalation-header">
+            <IconEscalate size={14} /> Human Review Required
+          </div>
           <p>The auto-fix loop exhausted its retry budget. Review the errors below and re-run with a more specific intent.</p>
         </div>
       )}
@@ -108,14 +117,14 @@ export function AgentPanel({ run }: Props) {
 
 function EventRow({ event, isLast }: { event: AgentEvent; isLast: boolean }) {
   const cfg = EVENT_CONFIG[event.event] ?? {
-    icon: '·', color: 'neutral', label: (e: AgentEvent) => e.event,
+    Icon: IconDoc, color: 'neutral', label: (e: AgentEvent) => e.event,
   };
   const label = cfg.label(event);
   const ts = event.timestamp ? new Date(event.timestamp).toLocaleTimeString([], { hour12: false }) : '';
 
   return (
     <div className={`cf-event cf-event--${cfg.color} ${isLast ? 'cf-event--active' : ''}`}>
-      <span className="cf-event-icon">{cfg.icon}</span>
+      <span className="cf-event-icon"><cfg.Icon size={14} /></span>
       <span className="cf-event-label">{label}</span>
       {ts && <span className="cf-event-ts">{ts}</span>}
       {isLast && <span className="cf-pulse" />}

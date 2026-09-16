@@ -68,7 +68,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   font-weight: 600;
   font-size: 15px;
 }
-.cf-logo-icon { font-size: 18px; }
+.cf-logo-icon { display: inline-flex; align-items: center; }
 
 /* ── Intent Input ───────────────────────────────────────────────── */
 .cf-intent-wrap { padding: 12px; border-bottom: 1px solid var(--border); }
@@ -160,7 +160,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .cf-run-item:hover { background: var(--bg-3); color: var(--text); }
 .cf-run-item--active { background: var(--blue-bg); border-color: var(--blue); color: var(--text); }
 .cf-run-item-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cf-run-dot { font-size: 10px; flex-shrink: 0; }
+.cf-run-dot { display: inline-flex; align-items: center; flex-shrink: 0; }
 .cf-run-age { font-size: 11px; color: var(--text-3); flex-shrink: 0; }
 
 /* ── Settings ─────────────────────────────────────────────────────── */
@@ -259,7 +259,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .cf-event--warn { border-left-color: var(--amber); }
 .cf-event--neutral { border-left-color: var(--border); }
 .cf-event--active { background: var(--bg-2); }
-.cf-event-icon { font-size: 13px; flex-shrink: 0; }
+.cf-event-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
 .cf-event-label { flex: 1; color: var(--text); }
 .cf-event-ts { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); flex-shrink: 0; }
 
@@ -318,7 +318,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .cf-file-row:hover { background: var(--bg-3); }
 .cf-file-row--active { background: var(--bg-3); color: var(--text); }
 .cf-file-row input { accent-color: var(--blue); flex-shrink: 0; }
-.cf-file-icon { font-size: 12px; flex-shrink: 0; }
+.cf-file-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
 .cf-file-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; }
 .cf-scan-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .cf-scan-dot--pass { background: var(--green); }
@@ -399,7 +399,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .cf-context-panel { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
 .cf-ctx-section-title { font-size: 11px; font-weight: 500; color: var(--text-3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
 .cf-ctx-item { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text-2); padding: 3px 0; }
-.cf-ctx-icon { font-size: 12px; }
+.cf-ctx-icon { display: inline-flex; align-items: center; color: var(--text-3); }
 .cf-ctx-empty { font-size: 12px; color: var(--text-3); }
 
 .cf-timeline { display: flex; flex-direction: column; gap: 3px; }
@@ -410,7 +410,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 
 /* ── Empty State ─────────────────────────────────────────────────── */
 .cf-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; padding: 40px; text-align: center; }
-.cf-empty-icon { font-size: 48px; }
+.cf-empty-icon { display: flex; justify-content: center; }
 .cf-empty h2 { font-size: 22px; font-weight: 600; }
 .cf-empty p { color: var(--text-2); max-width: 380px; font-size: 14px; line-height: 1.6; }
 .cf-examples { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; margin-top: 8px; }
@@ -432,3 +432,25 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-2); }
+
+
+/* ── Icon alignment ──────────────────────────────────────────────────
+   Icons are inline SVG inheriting currentColor; keep them optically
+   centred against the label text they sit beside. */
+.cf-btn, .cf-settings-btn, .cf-tab, .cf-run-btn, .cf-pr-link, .cf-escalation-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cf-tab { justify-content: center; }
+.cf-btn svg, .cf-settings-btn svg, .cf-tab svg, .cf-escalation-header svg { flex-shrink: 0; }
+.cf-badge svg { vertical-align: -1px; margin-right: 3px; }
+
+/* Running runs get a soft breathing indicator rather than a static glyph. */
+@keyframes cf-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+.cf-dot-pulse { animation: cf-dot-pulse 1.4s ease-in-out infinite; }
+
+.cf-hint { color: var(--text-3); font-weight: 400; }
