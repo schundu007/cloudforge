@@ -15,6 +15,10 @@ from typing import Any
 import anthropic
 import structlog
 
+from cloudforge.core.emulator.tools import resolve_tool
+
+from cloudforge.core.parsers.llm_output import parse_files
+
 log = structlog.get_logger()
 MODEL = "claude-sonnet-4-6"
 
@@ -132,7 +136,7 @@ Preserve all existing resources. Only fix the reported issues.
                 f.write(content)
                 tmp = f.name
             result = subprocess.run(
-                ["checkov", "-f", tmp, "--output", "json", "--quiet"],
+                [resolve_tool("checkov") or "checkov", "-f", tmp, "--output", "json", "--quiet"],
                 capture_output=True, text=True, timeout=60,
             )
             data = json.loads(result.stdout) if result.stdout.strip() else {}
@@ -149,7 +153,7 @@ Preserve all existing resources. Only fix the reported issues.
                 "raw": data,
             }
         except FileNotFoundError:
-            return {"passed": True, "output": "checkov not installed — skipped"}
+            return {"passed": True, "skipped": True, "output": "checkov not installed — skipped"}
         except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
             return {"passed": False, "output": str(e)}
 
@@ -167,7 +171,7 @@ Preserve all existing resources. Only fix the reported issues.
                 critical = [r for r in results if r.get("severity") in ("HIGH", "CRITICAL")]
                 return {"passed": len(critical) == 0, "findings": critical, "total": len(results)}
         except FileNotFoundError:
-            return {"passed": True, "output": "tfsec not installed — skipped"}
+            return {"passed": True, "skipped": True, "output": "tfsec not installed — skipped"}
         except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
             return {"passed": False, "output": str(e)}
 
@@ -175,17 +179,7 @@ Preserve all existing resources. Only fix the reported issues.
     # Utilities
     # ------------------------------------------------------------------
     def _parse_files(self, raw: str) -> list[dict]:
-        import re
-        m = re.search(r'\{.*\}', raw, re.DOTALL)
-        if m:
-            try:
-                data = json.loads(m.group())
-                if "files" in data:
-                    return data["files"]
-            except json.JSONDecodeError:
-                pass
-        # Fallback: treat entire output as a single main.tf
-        return [{"path": "modules/generated/main.tf", "content": raw}]
+        return parse_files(raw, "modules/generated/main.tf")
 
     def _make_diff(self, path: str, content: str) -> str:
         lines = content.splitlines()

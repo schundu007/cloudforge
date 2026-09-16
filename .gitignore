@@ -61,3 +61,9 @@ build/
 
 # Claude
 .claude/
+
+# CloudForge generated context cache
+.cloudforge/
+
+# Vercel
+.vercel

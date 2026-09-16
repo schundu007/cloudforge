@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from cloudforge.core.agents.orchestrator import TaskType
+from cloudforge.core.types import TaskType
 
 
 class ErrorType(str, Enum):

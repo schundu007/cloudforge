@@ -14,6 +14,8 @@ from typing import Any
 import anthropic
 import structlog
 
+from cloudforge.core.parsers.llm_output import parse_files
+
 log = structlog.get_logger()
 MODEL = "claude-sonnet-4-6"
 
@@ -103,21 +105,12 @@ Return corrected content only.
             )
             return {"passed": result.returncode == 0, "output": result.stderr}
         except FileNotFoundError:
-            return {"passed": True, "output": "opa not installed — skipped"}
+            return {"passed": True, "skipped": True, "output": "opa not installed — skipped"}
         except subprocess.TimeoutExpired:
             return {"passed": False, "output": "opa timed out"}
 
     def _parse_files(self, raw: str) -> list[dict]:
-        import re
-        m = re.search(r'\{.*\}', raw, re.DOTALL)
-        if m:
-            try:
-                data = json.loads(m.group())
-                if "files" in data:
-                    return data["files"]
-            except json.JSONDecodeError:
-                pass
-        return [{"path": "security/policy.json", "content": raw, "type": "iam"}]
+        return parse_files(raw, "security/policy.json", {"type": "iam"})
 
     def _make_diff(self, path: str, content: str) -> str:
         lines = content.splitlines()

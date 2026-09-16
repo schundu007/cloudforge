@@ -14,6 +14,8 @@ import anthropic
 import yaml
 import structlog
 
+from cloudforge.core.parsers.llm_output import extract_json, strip_code_fence
+
 log = structlog.get_logger()
 
 MODEL = "claude-sonnet-4-6"
@@ -119,13 +121,11 @@ Return JSON: {{"filename": "...", "content": "..."}}
         )
 
         raw = resp.content[0].text.strip()
-        # Parse JSON wrapper
-        import json, re
-        m = re.search(r'\{.*\}', raw, re.DOTALL)
-        if m:
-            data = json.loads(m.group())
-        else:
-            data = {"filename": "generated-workflow.yml", "content": raw}
+        # Parse JSON wrapper (tolerates fences / unescaped newlines; an
+        # unparseable response must not take the whole run down).
+        data = extract_json(raw) or {}
+        if not (data.get("filename") and data.get("content")):
+            data = {"filename": "generated-workflow.yml", "content": strip_code_fence(raw)}
 
         filename = data["filename"]
         content = data["content"]
@@ -193,6 +193,6 @@ Return the corrected YAML only. No explanation.
             )
             return {"passed": result.returncode == 0, "output": result.stdout + result.stderr}
         except FileNotFoundError:
-            return {"passed": True, "output": "actionlint not installed — skipped"}
+            return {"passed": True, "skipped": True, "output": "actionlint not installed — skipped"}
         except subprocess.TimeoutExpired:
             return {"passed": False, "output": "actionlint timed out"}

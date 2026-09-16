@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useStore, type Run, type GeneratedFile } from '../store';
+import { AgentIcon, IconCheck, IconCheckMark, IconXMark, IconArrowUpRight } from './icons';
 
 interface Props {
   run: Run;
@@ -26,9 +27,6 @@ export function DiffReview({ run }: Props) {
 
   const activeFileData = run.files.find(f => f.path === activeFile);
   const allSelected = selected.size === run.files.length;
-  const allPassed = run.files.every(f =>
-    f.checkov?.passed !== false && f.tfsec?.passed !== false && f.actionlint?.passed !== false
-  );
 
   function toggleFile(path: string) {
     setSelected(s => {
@@ -75,10 +73,10 @@ export function DiffReview({ run }: Props) {
         <div className="cf-diff-actions">
           {run.status === 'pr_opened' ? (
             <div className="cf-pr-success">
-              ✅ PR opened
+              <IconCheck size={14} /> PR opened
               {run.pr_url && (
                 <a href={run.pr_url} target="_blank" rel="noreferrer" className="cf-pr-link">
-                  View PR →
+                  View PR <IconArrowUpRight size={12} />
                 </a>
               )}
             </div>
@@ -89,13 +87,13 @@ export function DiffReview({ run }: Props) {
                 onClick={handleAccept}
                 disabled={selected.size === 0}
               >
-                ✓ Accept {selected.size < run.files.length ? `(${selected.size})` : 'all'} & open PR
+                <IconCheckMark size={13} /> Accept {selected.size < run.files.length ? `(${selected.size})` : 'all'} & open PR
               </button>
               <button
                 className="cf-btn cf-btn-reject"
                 onClick={() => setShowReject(s => !s)}
               >
-                ✗ Reject
+                <IconXMark size={13} /> Reject
               </button>
             </>
           )}
@@ -132,13 +130,13 @@ function FileRow({ file, checked, active, onToggle, onSelect }: {
   onToggle: () => void;
   onSelect: () => void;
 }) {
-  const agentIcon = { pipeline: '⚙️', iac: '🏗️', security: '🔒', observability: '📡' }[file.agent] ?? '📄';
+
   const scansPassed = file.checkov?.passed !== false && file.tfsec?.passed !== false && file.actionlint?.passed !== false;
 
   return (
     <div className={`cf-file-row ${active ? 'cf-file-row--active' : ''}`} onClick={onSelect}>
       <input type="checkbox" checked={checked} onClick={e => e.stopPropagation()} onChange={onToggle} />
-      <span className="cf-file-icon">{agentIcon}</span>
+      <span className="cf-file-icon"><AgentIcon agent={file.agent} size={12} /></span>
       <span className="cf-file-path">{file.path}</span>
       <span className={`cf-scan-dot ${scansPassed ? 'cf-scan-dot--pass' : 'cf-scan-dot--fail'}`} />
     </div>
@@ -150,7 +148,7 @@ function DiffViewer({ file }: { file: GeneratedFile }) {
 
   const scanBadges = [
     file.checkov && { label: 'checkov', passed: file.checkov.passed,
-      detail: `${file.checkov.passed_checks}✓ ${file.checkov.failed_checks}✗` },
+      detail: `${file.checkov.passed_checks} passed / ${file.checkov.failed_checks} failed` },
     file.tfsec && { label: 'tfsec', passed: file.tfsec.passed,
       detail: `${file.tfsec.total} findings` },
     file.actionlint && { label: 'actionlint', passed: file.actionlint.passed, detail: '' },
@@ -164,7 +162,7 @@ function DiffViewer({ file }: { file: GeneratedFile }) {
         <div className="cf-scan-badges">
           {scanBadges.map(b => (
             <span key={b.label} className={`cf-scan-badge ${b.passed ? 'cf-scan-badge--pass' : 'cf-scan-badge--fail'}`}>
-              {b.passed ? '✓' : '✗'} {b.label}{b.detail ? ` · ${b.detail}` : ''}
+              {b.passed ? <IconCheckMark size={11} /> : <IconXMark size={11} />} {b.label}{b.detail ? ` · ${b.detail}` : ''}
             </span>
           ))}
         </div>

@@ -1,4 +1,12 @@
-import { Run } from '../store';
+import { Run, type GeneratedFile } from '../store';
+
+/** A generated file has no status field; derive one from its scan results. */
+function scanState(file: GeneratedFile): string {
+  const scans = [file.checkov?.passed, file.tfsec?.passed, file.actionlint?.passed, file.pint?.passed];
+  if (scans.some(v => v === false)) return 'failed';
+  if (scans.some(v => v === true)) return 'passed';
+  return 'generated';
+}
 
 interface ContextPanelProps {
   run: Run;
@@ -36,8 +44,8 @@ export function ContextPanel({ run }: ContextPanelProps) {
             {run.files.map(file => (
               <li key={file.path}>
                 <code>{file.path}</code>
-                <span className={`cf-file-status cf-file-status--${file.status}`}>
-                  {file.status}
+                <span className={`cf-file-status cf-file-status--${scanState(file)}`}>
+                  {scanState(file)}
                 </span>
               </li>
             ))}

@@ -8,14 +8,24 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import secrets
 from pathlib import Path
 from typing import AsyncIterator
 
+from dotenv import load_dotenv
+
+# Load .env so ANTHROPIC_API_KEY / GITHUB_TOKEN are available when the
+# process is started without them exported (documented setup in README).
+load_dotenv()
+
 import structlog
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
+
+from cloudforge.core.git.workspace import RepoError, RepoWorkspace
+from cloudforge.core.github.pr import PullRequestError, open_pull_request
 
 log = structlog.get_logger()
 
@@ -25,12 +35,42 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# CORS: locked to the dashboard origins in production. Set
+# CLOUDFORGE_ALLOWED_ORIGINS as a comma-separated list; "*" re-opens it.
+_origins_env = os.getenv("CLOUDFORGE_ALLOWED_ORIGINS", "").strip()
+ALLOWED_ORIGINS = (
+    [o.strip() for o in _origins_env.split(",") if o.strip()]
+    if _origins_env
+    else ["http://localhost:5173", "http://127.0.0.1:5173"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in production
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Shared-secret gate. When CLOUDFORGE_API_TOKEN is set, every endpoint except
+# /health requires `Authorization: Bearer <token>`. Unset = open (local dev).
+API_TOKEN = os.getenv("CLOUDFORGE_API_TOKEN", "").strip()
+_PUBLIC_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def require_api_token(request: Request, call_next):
+    if not API_TOKEN or request.method == "OPTIONS" or request.url.path in _PUBLIC_PATHS:
+        return await call_next(request)
+
+    header = request.headers.get("authorization", "")
+    scheme, _, credential = header.partition(" ")
+    presented = credential.strip() if scheme.lower() == "bearer" else ""
+    # Constant-time compare so the token can't be recovered by timing.
+    if not presented or not secrets.compare_digest(presented, API_TOKEN):
+        log.warning("api.unauthorized", path=request.url.path, client=request.client.host if request.client else "?")
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    return await call_next(request)
 
 # In-memory run registry (replace with Redis in production)
 _runs: dict[str, dict] = {}
@@ -41,7 +81,11 @@ _runs: dict[str, dict] = {}
 # ------------------------------------------------------------------
 class RunRequest(BaseModel):
     intent: str
-    repo_root: str
+    # Either clone a repo for this run (deployment) or point at a local path
+    # (development). repo_url wins when both are given.
+    repo_url: str | None = None
+    branch: str | None = None
+    repo_root: str | None = None
     target_path: str | None = None
     github_token: str | None = None
 
@@ -65,8 +109,19 @@ class HookEventRequest(BaseModel):
 async def create_run(req: RunRequest, background_tasks: BackgroundTasks) -> dict:
     """Start a new agent run. Returns run_id immediately; stream progress via SSE."""
     import uuid
+    if not req.repo_url and not req.repo_root:
+        raise HTTPException(status_code=422, detail="Provide repo_url or repo_root")
+
     run_id = str(uuid.uuid4())
-    _runs[run_id] = {"status": "pending", "events": [], "files": [], "diff": None}
+    _runs[run_id] = {
+        "status": "pending",
+        "events": [],
+        "files": [],
+        "diff": None,
+        "repo_url": req.repo_url,
+        "branch": req.branch,
+        "github_token": req.github_token,
+    }
 
     background_tasks.add_task(_execute_run, run_id, req)
     return {"run_id": run_id, "status": "started"}
@@ -123,11 +178,38 @@ async def accept_diff(run_id: str, req: AcceptDiffRequest) -> dict:
     if req.file_paths:
         files = [f for f in files if f["path"] in req.file_paths]
 
-    # In production: commit files to feature branch, open PR via GitHub API
-    pr_url = await _push_to_github(files, req.pr_title or "CloudForge: automated infra update")
-    _runs[run_id]["pr_url"] = pr_url
+    repo_url = run.get("repo_url")
+    if not repo_url:
+        raise HTTPException(
+            status_code=409,
+            detail="This run has no target repository. Start the run with repo_url to open a PR.",
+        )
+
+    title = req.pr_title or "CloudForge: automated infra update"
+    token = run.get("github_token") or os.getenv("GITHUB_TOKEN", "")
+
+    try:
+        result = await asyncio.to_thread(
+            open_pull_request,
+            repo_url=repo_url,
+            files=files,
+            title=title,
+            token=token,
+            body=req.pr_body,
+            base=run.get("branch"),
+        )
+    except (PullRequestError, RepoError) as exc:
+        log.warning("accept.pr_failed", run_id=run_id, error=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    _runs[run_id]["pr_url"] = result.url
     _runs[run_id]["status"] = "pr_opened"
-    return {"pr_url": pr_url, "files_accepted": [f["path"] for f in files]}
+    return {
+        "pr_url": result.url,
+        "branch": result.branch,
+        "base": result.base,
+        "files_accepted": result.files,
+    }
 
 
 @app.post("/runs/{run_id}/reject")
@@ -160,12 +242,29 @@ async def health() -> dict:
 # ------------------------------------------------------------------
 async def _execute_run(run_id: str, req: RunRequest) -> None:
     """Execute the full orchestrator loop, append events to run registry."""
+    workspace: RepoWorkspace | None = None
     try:
         from cloudforge.core.agents.orchestrator import Orchestrator
 
+        token = req.github_token or os.getenv("GITHUB_TOKEN", "")
+
+        if req.repo_url:
+            # Clone the target repo for this run; the container's own filesystem
+            # is not a meaningful place to generate infrastructure.
+            workspace = await asyncio.to_thread(
+                lambda: RepoWorkspace(req.repo_url, branch=req.branch, token=token).open()
+            )
+            repo_root = workspace.path
+            _runs[run_id]["events"].append(
+                {"event": "repo_cloned", "repo": workspace.ref.full_name,
+                 "branch": req.branch or "(default)"}
+            )
+        else:
+            repo_root = Path(req.repo_root or ".")
+
         orchestrator = Orchestrator(
-            repo_root=Path(req.repo_root),
-            github_token=req.github_token or os.getenv("GITHUB_TOKEN", ""),
+            repo_root=repo_root,
+            github_token=token,
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         )
 
@@ -182,14 +281,17 @@ async def _execute_run(run_id: str, req: RunRequest) -> None:
             elif event.get("event") == "escalate":
                 _runs[run_id]["status"] = "escalated"
 
+    except RepoError as e:
+        log.warning("run.clone_failed", run_id=run_id, error=str(e))
+        _runs[run_id]["status"] = "error"
+        _runs[run_id]["error"] = str(e)
     except Exception as e:
         log.exception("run.failed", run_id=run_id, error=str(e))
         _runs[run_id]["status"] = "error"
         _runs[run_id]["error"] = str(e)
+    finally:
+        if workspace is not None:
+            workspace.close()
 
 
-async def _push_to_github(files: list[dict], title: str) -> str:
-    """Stub: push files to feature branch and open PR. Wire up PyGithub in production."""
-    # TODO: implement with PyGithub
-    branch = f"cloudforge/{title.lower().replace(' ', '-')[:40]}"
-    return f"https://github.com/your-org/your-repo/pull/999  # branch: {branch}"
+

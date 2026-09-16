@@ -1,0 +1,31 @@
+# Secrets — never bake into an image layer
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# VCS / local tooling
+.git
+.github
+.claude
+.cloudforge
+.DS_Store
+
+# Python local artifacts
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+
+# Node / frontend build output (API image does not serve the dashboard)
+**/node_modules
+**/dist
+cloudforge/interfaces/web/frontend
+
+# Tests and docs not needed at runtime
+tests

@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { RunList } from './components/RunList';
 import { AgentPanel } from './components/AgentPanel';
 import { DiffReview } from './components/DiffReview';
 import { IntentInput } from './components/IntentInput';
 import { ContextPanel } from './components/ContextPanel';
 import { useStore } from './store';
+import { CloudForgeMark, IconSettings, IconAgent, IconDiff, IconLayers } from './components/icons';
 
 export default function App() {
-  const { activeRunId, runs, apiUrl, setApiUrl, repoRoot, setRepoRoot } = useStore();
+  const { activeRunId, runs, apiUrl, setApiUrl, repoRoot, setRepoRoot, repoUrl, setRepoUrl } = useStore();
   const activeRun = activeRunId ? runs[activeRunId] : null;
   const [tab, setTab] = useState<'agent' | 'diff' | 'context'>('agent');
   const [showSettings, setShowSettings] = useState(false);
@@ -17,7 +18,7 @@ export default function App() {
       {/* Sidebar */}
       <aside className="cf-sidebar">
         <div className="cf-logo">
-          <span className="cf-logo-icon">⚡</span>
+          <span className="cf-logo-icon"><CloudForgeMark size={22} /></span>
           <span className="cf-logo-text">CloudForge</span>
         </div>
 
@@ -25,7 +26,7 @@ export default function App() {
         <RunList />
 
         <button className="cf-settings-btn" onClick={() => setShowSettings(s => !s)}>
-          ⚙ Settings
+          <IconSettings size={13} /> Settings
         </button>
 
         {showSettings && (
@@ -33,7 +34,14 @@ export default function App() {
             <label>API URL
               <input value={apiUrl} onChange={e => setApiUrl(e.target.value)} />
             </label>
-            <label>Repo Root
+            <label>Repo URL
+              <input
+                value={repoUrl}
+                placeholder="https://github.com/owner/repo"
+                onChange={e => setRepoUrl(e.target.value)}
+              />
+            </label>
+            <label>Repo Root <span className="cf-hint">(local API only)</span>
               <input value={repoRoot} onChange={e => setRepoRoot(e.target.value)} />
             </label>
           </div>
@@ -68,9 +76,9 @@ export default function App() {
                   className={`cf-tab ${tab === t ? 'cf-tab--active' : ''}`}
                   onClick={() => setTab(t)}
                 >
-                  {t === 'agent' && '🤖 '}
-                  {t === 'diff' && '📋 '}
-                  {t === 'context' && '🗂 '}
+                  {t === 'agent' && <IconAgent size={13} />}
+                  {t === 'diff' && <IconDiff size={13} />}
+                  {t === 'context' && <IconLayers size={13} />}
                   {t.charAt(0).toUpperCase() + t.slice(1)}
                   {t === 'diff' && activeRun.files.length > 0 && (
                     <span className="cf-tab-count">{activeRun.files.length}</span>
@@ -109,7 +117,7 @@ function StatusBadge({ status }: { status: string }) {
 function EmptyState() {
   return (
     <div className="cf-empty">
-      <div className="cf-empty-icon">⚡</div>
+      <div className="cf-empty-icon"><CloudForgeMark size={56} /></div>
       <h2>CloudForge</h2>
       <p>Describe what you want to build or fix — pipelines, IaC, security policies, or observability configs.</p>
       <div className="cf-examples">

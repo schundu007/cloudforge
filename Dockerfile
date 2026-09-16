@@ -81,7 +81,10 @@ EXPOSE 8000
 EXPOSE 8001
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-CMD ["uvicorn", "cloudforge.interfaces.web.api.main:app", \
-     "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Shell form so $PORT (injected by Railway/Heroku-style platforms) expands.
+# Single worker: run state lives in an in-memory dict, so a second worker would
+# serve 404s for runs created by the first.
+CMD uvicorn cloudforge.interfaces.web.api.main:app \
+    --host 0.0.0.0 --port ${PORT:-8000} --workers 1

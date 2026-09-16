@@ -1,7 +1,8 @@
 import { useStore } from '../store';
+import { IconStatusDot } from './icons';
 
 export function RunList() {
-  const { runs, activeRunId, setActiveRunId } = useStore();
+  const { runs, activeRunId, setActiveRun } = useStore();
   const runList = Object.values(runs).sort((a, b) => b.started_at - a.started_at);
 
   if (runList.length === 0) {
@@ -18,7 +19,7 @@ export function RunList() {
         <button
           key={run.id}
           className={`cf-run-item ${activeRunId === run.id ? 'cf-run-item--active' : ''}`}
-          onClick={() => setActiveRunId(run.id)}
+          onClick={() => setActiveRun(run.id)}
         >
           <div className="cf-run-item-intent">{run.intent}</div>
           <div className="cf-run-item-meta">
@@ -34,18 +35,5 @@ export function RunList() {
 }
 
 function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    pending: '#888',
-    running: '#3b82f6',
-    complete: '#22c55e',
-    error: '#ef4444',
-    escalated: '#f59e0b',
-    pr_opened: '#22c55e',
-  };
-  return (
-    <span
-      className="cf-status-dot"
-      style={{ backgroundColor: colors[status] || '#888' }}
-    />
-  );
+  return <IconStatusDot status={status} size={9} />;
 }

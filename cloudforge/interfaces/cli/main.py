@@ -12,6 +12,12 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load .env so ANTHROPIC_API_KEY / GITHUB_TOKEN are available when the
+# process is started without them exported (documented setup in README).
+load_dotenv()
+
 import typer
 from rich.console import Console
 from rich.live import Live

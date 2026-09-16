@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useStore, type Run } from '../store';
+import { IconBolt, IconStatusDot, IconCube, IconBranch } from './icons';
 import { formatDistanceToNow } from 'date-fns';
 
 // ── IntentInput ────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ export function IntentInput() {
           onClick={() => submit(value)}
           disabled={!value.trim() || loading}
         >
-          {loading ? <span className="cf-spinner cf-spinner-sm" /> : '⚡ Run'}
+          {loading ? <span className="cf-spinner cf-spinner-sm" /> : <><IconBolt size={13} /> Run</>}
         </button>
       </div>
 
@@ -105,13 +106,14 @@ export function RunList() {
 
 function RunItem({ run, active, onClick }: { run: Run; active: boolean; onClick: () => void }) {
   const statusDot: Record<string, string> = {
-    running: '🟡', pending: '⚪', complete: '🟢', error: '🔴', escalated: '🔴', pr_opened: '🟢',
+    running: 'running', pending: 'pending', complete: 'complete',
+    error: 'error', escalated: 'escalated', pr_opened: 'pr_opened',
   };
-  const dot = statusDot[run.status] ?? '⚪';
+  const dot = statusDot[run.status] ?? 'pending';
 
   return (
     <button className={`cf-run-item ${active ? 'cf-run-item--active' : ''}`} onClick={onClick}>
-      <span className="cf-run-dot">{dot}</span>
+      <span className="cf-run-dot"><IconStatusDot status={dot} size={9} /></span>
       <span className="cf-run-item-text">{run.intent.slice(0, 52)}</span>
       <span className="cf-run-age">
         {formatDistanceToNow(run.started_at, { addSuffix: false }).replace('about ', '')}
@@ -130,14 +132,14 @@ export function ContextPanel({ run }: { run: Run }) {
         <>
           <Section title="TF Modules">
             {(contextEvent.tf_modules ?? []).map(m => (
-              <div key={m} className="cf-ctx-item"><span className="cf-ctx-icon">📦</span>{m}</div>
+              <div key={m} className="cf-ctx-item"><span className="cf-ctx-icon"><IconCube size={12} /></span>{m}</div>
             ))}
             {!contextEvent.tf_modules?.length && <div className="cf-ctx-empty">No modules found</div>}
           </Section>
 
           <Section title="GitHub Actions Workflows">
             {(contextEvent.workflows ?? []).map(w => (
-              <div key={w} className="cf-ctx-item"><span className="cf-ctx-icon">⚙️</span>{w}</div>
+              <div key={w} className="cf-ctx-item"><span className="cf-ctx-icon"><IconBranch size={12} /></span>{w}</div>
             ))}
             {!contextEvent.workflows?.length && <div className="cf-ctx-empty">No workflows found</div>}
           </Section>
