@@ -16,6 +16,8 @@ from typing import Any, AsyncIterator
 import anthropic
 import structlog
 
+from cloudforge.core.types import TaskType
+from cloudforge.core.parsers.llm_output import extract_json_list
 from cloudforge.core.context.store import ContextStore
 from cloudforge.core.agents.pipeline_writer import PipelineWriter
 from cloudforge.core.agents.iac_writer import IaCWriter
@@ -28,14 +30,6 @@ log = structlog.get_logger()
 
 MODEL = "claude-sonnet-4-6"
 MAX_FIX_RETRIES = 5
-
-
-class TaskType(str, Enum):
-    PIPELINE = "pipeline"
-    IAC = "iac"
-    SECURITY = "security"
-    OBSERVABILITY = "observability"
-    MULTI = "multi"
 
 
 @dataclass
@@ -114,7 +108,7 @@ When you need to generate files, call the appropriate tool. Always explain what 
         all_files: list[dict] = []
         for t_type, t_intent in sub_tasks:
             yield {"event": "agent_start", "agent": t_type.value, "intent": t_intent}
-            agent = self.agents[t_type]
+            agent = self.agents.get(t_type) or self.agents[TaskType.IAC]
             files = await agent.generate(t_intent, ctx, self.context.as_prompt_context())
             all_files.extend(files)
             yield {"event": "agent_done", "agent": t_type.value, "files": [f["path"] for f in files]}
@@ -171,11 +165,24 @@ When you need to generate files, call the appropriate tool. Always explain what 
             system='Return a JSON array of {type, intent} objects. Types: pipeline, iac, security, observability.',
             messages=[{"role": "user", "content": intent}],
         )
-        try:
-            tasks = json.loads(resp.content[0].text)
-            return [(TaskType(t["type"]), t["intent"]) for t in tasks]
-        except (json.JSONDecodeError, KeyError, ValueError):
-            return [(TaskType.MULTI, intent)]
+        tasks = extract_json_list(resp.content[0].text) or []
+        sub_tasks: list[tuple[TaskType, str]] = []
+        for t in tasks:
+            if not isinstance(t, dict):
+                continue
+            try:
+                t_type = TaskType(str(t.get("type", "")).strip().lower())
+            except ValueError:
+                continue
+            if t_type in self.agents:
+                sub_tasks.append((t_type, str(t.get("intent") or intent)))
+
+        if sub_tasks:
+            return sub_tasks
+        # Decomposition failed. MULTI has no agent of its own, so fall back to
+        # a concrete one rather than routing to a key that does not exist.
+        log.warning("orchestrator.decompose_failed", intent=intent)
+        return [(TaskType.IAC, intent)]
 
     async def _apply_fix(self, patch_request: Any, files: list[dict]) -> list[dict]:
         """Call the appropriate sub-agent to fix a specific error."""
