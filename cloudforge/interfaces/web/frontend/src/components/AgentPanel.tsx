@@ -100,6 +100,21 @@ export function AgentPanel({ run }: Props) {
           <ErrorBlock key={i} errors={e.errors!} />
         ))}
 
+      {/* Failure reason — a red dot with no explanation is not a diagnosis. */}
+      {run.error && (
+        <div className="cf-run-error">
+          <div className="cf-run-error-header">
+            <IconError size={14} /> Run failed
+          </div>
+          <pre className="cf-run-error-body">{run.error}</pre>
+          {/Could not resolve authentication|x-api-key|api_key/i.test(run.error) && (
+            <p className="cf-run-error-hint">
+              The API has no Anthropic key. Set ANTHROPIC_API_KEY on the server and redeploy.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Escalation block */}
       {run.status === 'escalated' && (
         <div className="cf-escalation">

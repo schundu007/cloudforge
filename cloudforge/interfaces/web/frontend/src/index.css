@@ -454,3 +454,21 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .cf-dot-pulse { animation: cf-dot-pulse 1.4s ease-in-out infinite; }
 
 .cf-hint { color: var(--text-3); font-weight: 400; }
+
+/* ── Run failure ─────────────────────────────────────────────────── */
+.cf-run-error {
+  margin: 12px 0;
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  background: var(--red-bg);
+  padding: 10px 12px;
+}
+.cf-run-error-header {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--red); font-weight: 600; margin-bottom: 6px;
+}
+.cf-run-error-body {
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5;
+  color: var(--text); white-space: pre-wrap; word-break: break-word; margin: 0;
+}
+.cf-run-error-hint { margin-top: 8px; color: var(--text-2); font-size: 12px; }

@@ -142,7 +142,12 @@ async def stream_run(run_id: str) -> StreamingResponse:
                 yield f"data: {json.dumps(event)}\n\n"
                 last_idx = len(events)
             if run.get("status") in ("complete", "error", "escalated"):
-                yield f"data: {json.dumps({'event': 'done', 'status': run['status']})}\n\n"
+                # Carry the failure reason to the client; a bare "done" left the
+                # dashboard showing a finished run with no explanation.
+                terminal = {"event": "done", "status": run["status"]}
+                if run.get("error"):
+                    terminal["message"] = str(run["error"])
+                yield f"data: {json.dumps(terminal)}\n\n"
                 break
             await asyncio.sleep(0.2)
 

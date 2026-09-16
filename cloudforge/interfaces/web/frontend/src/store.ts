@@ -44,6 +44,7 @@ export interface Run {
   files: GeneratedFile[];
   diff: string | null;
   pr_url: string | null;
+  error?: string;
   fix_iterations: number;
   started_at: number;
   completed_at?: number;
@@ -160,9 +161,11 @@ export const useStore = create<CloudForgeStore>((set, get) => ({
           updated.completed_at = Date.now();
         } else if (event.event === 'done') {
           updated.status = (event as { status?: Run['status'] }).status ?? 'complete';
+          if (event.message) updated.error = event.message;
           finished = true;
         } else if (event.event === 'error') {
           updated.status = 'error';
+          updated.error = event.message ?? 'Run failed';
           updated.completed_at = Date.now();
           finished = true;
         } else if (event.event === 'context_loaded' || event.event === 'agent_start') {
